@@ -1,0 +1,46 @@
+name: CI/CD Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker compose build
+
+      - name: Start container for test
+        run: docker compose up -d app
+
+      - name: Check application
+        run: |
+          sleep 10
+          docker compose ps
+          curl -f http://localhost:8000/
+
+      - name: Stop test containers
+        if: always()
+        run: docker compose down
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to virtual machine
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
+            cd '${{ secrets.PROJECT_PATH }}' &&
+            git pull origin master &&
+            docker compose up -d --build
+          "
+
