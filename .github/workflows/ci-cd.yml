@@ -56,14 +56,32 @@ jobs:
           VM_USER: ${{ secrets.VM_USER }}
           VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
           PROJECT_DIR: ${{ secrets.PROJECT_DIR }}
-        run: |
+                run: |
           set -e
+
+          echo "Checking required secrets..."
+          test -n "$VM_HOST" || (echo "VM_HOST is empty" && exit 1)
+          test -n "$VM_PORT" || (echo "VM_PORT is empty" && exit 1)
+          test -n "$VM_USER" || (echo "VM_USER is empty" && exit 1)
+          test -n "$VM_SSH_KEY" || (echo "VM_SSH_KEY is empty" && exit 1)
+          test -n "$PROJECT_DIR" || (echo "PROJECT_DIR is empty" && exit 1)
 
           mkdir -p ~/.ssh
           printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/vm_key
           chmod 600 ~/.ssh/vm_key
 
+          echo "Checking SSH port..."
+          nc -vz "$VM_HOST" "$VM_PORT"
+
+          echo "Adding host key..."
           ssh-keyscan -p "$VM_PORT" -H "$VM_HOST" >> ~/.ssh/known_hosts
 
+          echo "Testing SSH connection..."
+          ssh -i ~/.ssh/vm_key -p "$VM_PORT" "$VM_USER@$VM_HOST" "echo SSH connection successful"
+
+          echo "Checking project directory..."
+          ssh -i ~/.ssh/vm_key -p "$VM_PORT" "$VM_USER@$VM_HOST" "cd '$PROJECT_DIR' && pwd && ls -la"
+
+          echo "Deploying..."
           ssh -i ~/.ssh/vm_key -p "$VM_PORT" "$VM_USER@$VM_HOST" \
             "cd '$PROJECT_DIR' && git pull origin '${GITHUB_REF_NAME}' && docker compose up -d --build && docker compose ps"
