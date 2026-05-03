@@ -1,4 +1,4 @@
-name: Lab5 CI/CD
+name: Lab5 CI/CD UTM
 
 on:
   push:
@@ -11,13 +11,20 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test Docker container
-    runs-on: ubuntu-latest
+  build-test-deploy:
+    name: Build, test and deploy inside CentOS 9 UTM
+    runs-on: self-hosted
 
     steps:
       - name: Get source code
         uses: actions/checkout@v4
+
+      - name: Show environment
+        run: |
+          whoami
+          hostname
+          docker --version
+          docker compose version
 
       - name: Build Docker image
         run: |
@@ -45,46 +52,16 @@ jobs:
         run: |
           docker rm -f lab5-ci-app || true
 
-  deploy:
-    name: Deploy to CentOS 9 VM over SSH
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
-
-    env:
-      VM_HOST: ${{ secrets.VM_HOST }}
-      VM_USER: ${{ secrets.VM_USER }}
-      VM_PORT: ${{ secrets.VM_PORT }}
-      VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-      VM_PROJECT_PATH: ${{ secrets.VM_PROJECT_PATH }}
-
-    steps:
-      - name: Validate deployment secrets
-        run: |
-          test -n "$VM_HOST"
-          test -n "$VM_USER"
-          test -n "$VM_SSH_KEY"
-          test -n "$VM_PROJECT_PATH"
-
-      - name: Configure SSH
+      - name: Deploy application over SSH to localhost
         run: |
           set -e
-          PORT="${VM_PORT:-22}"
-          mkdir -p ~/.ssh
-          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/lab5_deploy_key
-          chmod 600 ~/.ssh/lab5_deploy_key
-          ssh-keyscan -p "$PORT" -H "$VM_HOST" >> ~/.ssh/known_hosts
-
-      - name: Deploy application
-        run: |
-          set -e
-          PORT="${VM_PORT:-22}"
-          ssh -i ~/.ssh/lab5_deploy_key -p "$PORT" "$VM_USER@$VM_HOST" << EOF
-          set -e
-          cd "$VM_PROJECT_PATH"
-          git fetch origin "$GITHUB_REF_NAME"
-          git checkout "$GITHUB_REF_NAME"
-          git pull --ff-only origin "$GITHUB_REF_NAME"
-          docker compose up -d --build
-          docker compose ps
-          EOF
+          PROJECT_PATH="$HOME/devops-lab-service-lab4-"
+          ssh -o StrictHostKeyChecking=no "$USER@127.0.0.1" "
+            set -e
+            cd '$PROJECT_PATH'
+            git fetch origin '$GITHUB_REF_NAME'
+            git checkout '$GITHUB_REF_NAME'
+            git pull --ff-only origin '$GITHUB_REF_NAME'
+            docker compose up -d --build
+            docker compose ps
+          "
