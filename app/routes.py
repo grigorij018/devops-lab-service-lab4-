@@ -10,7 +10,7 @@ task_id = 0
 
 @router.get("/")
 def root():
-    return {"message": "Service is running"}
+    return {"message": "Devops Lab Service updated by CI/CD"}
 
 
 @router.post("/tasks")
